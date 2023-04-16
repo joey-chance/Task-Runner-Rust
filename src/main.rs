@@ -8,8 +8,6 @@ use std::{
 
 use task::{Task, TaskType};
 
-use futures::future::join_all;
-
 #[tokio::main]
 async fn main() {
     let (seed, starting_height, max_children) = get_args();
@@ -23,8 +21,6 @@ async fn main() {
     let taskq = Arc::new(Mutex::new(VecDeque::from(Task::generate_initial(seed, starting_height, max_children))));
     
     let output = Arc::new(AtomicU64::new(0));
-    
-    let mut pending_tasks = Vec::new();
 
     let start = Instant::now();
 
@@ -39,15 +35,13 @@ async fn main() {
         *count_map.entry(next.typ).or_insert(0usize) += 1;
         let output_clone = output.clone();
         let taskq_clone = taskq.clone();
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             let result = next.execute();
             taskq_clone.lock().unwrap().extend(result.1.into_iter());
             output_clone.fetch_xor(result.0, Ordering::SeqCst);
         });
-        pending_tasks.push(handle);
     }
     
-    join_all(pending_tasks).await;
     let end = Instant::now();
 
     eprintln!("Completed in {} s", (end - start).as_secs_f64());
