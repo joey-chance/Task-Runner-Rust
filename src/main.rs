@@ -8,8 +8,6 @@ use std::{
 
 use task::{Task, TaskType};
 
-use futures::future::join_all;
-
 #[tokio::main]
 async fn main() {
     let (seed, starting_height, max_children) = get_args();
