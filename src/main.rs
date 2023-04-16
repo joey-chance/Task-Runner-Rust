@@ -27,16 +27,27 @@ async fn main() {
     let mut pending_tasks = Vec::new();
 
     let start = Instant::now();
-    while let Some(next) = taskq.lock().unwrap().pop_front() {
+
+    let mut curr_task = (*taskq.lock().unwrap()).pop_front();
+    while curr_task.is_some() || Arc::strong_count(&taskq) > 1  {
+        
+        if !curr_task.is_some() {
+            curr_task = (*taskq.lock().unwrap()).pop_front();
+            continue;
+        }
+        
+        let next = curr_task.unwrap();
+
         *count_map.entry(next.typ).or_insert(0usize) += 1;
         let output = output.clone();
-        let taskq = taskq.clone();
+        let taskq_clone = taskq.clone();
         let handle = tokio::spawn(async move {
             let result = next.execute();
             output.fetch_xor(result.0, Ordering::SeqCst);
-            taskq.lock().unwrap().extend(result.1.into_iter());
+            taskq_clone.lock().unwrap().extend(result.1.into_iter());
         });
         pending_tasks.push(handle);
+        curr_task = (*taskq.lock().unwrap()).pop_front();
     }
     
     join_all(pending_tasks).await;
