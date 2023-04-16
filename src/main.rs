@@ -19,18 +19,17 @@ async fn main() {
         seed, starting_height, max_children
     );
 
-    let count_map = Arc::new(Mutex::new(HashMap::new()));
+    let mut count_map = HashMap::new();
     let taskq = Arc::new(Mutex::new(VecDeque::from(Task::generate_initial(seed, starting_height, max_children))));
     let mut pending_tasks = Vec::new();
     let output = Arc::new(AtomicU64::new(0));
 
     let start = Instant::now();
     while let Some(next) = taskq.lock().unwrap().pop_front() {
-        let count_map = count_map.clone();
+        *count_map.entry(next.typ).or_insert(0usize) += 1;
         let output = output.clone();
         let taskq = taskq.clone();
         let handle = tokio::spawn(async move {
-            *count_map.lock().unwrap().entry(next.typ).or_insert(0usize) += 1;
             let result = async {next.execute()}.await;
             output.fetch_xor(result.0, Ordering::SeqCst);
             taskq.lock().unwrap().extend(result.1.into_iter());
@@ -46,9 +45,9 @@ async fn main() {
     println!(
         "{},{},{},{}",
         output.load(Ordering::SeqCst),
-        count_map.lock().unwrap().get(&TaskType::Hash).unwrap_or(&0),
-        count_map.lock().unwrap().get(&TaskType::Derive).unwrap_or(&0),
-        count_map.lock().unwrap().get(&TaskType::Random).unwrap_or(&0)
+        count_map.get(&TaskType::Hash).unwrap_or(&0),
+        count_map.get(&TaskType::Derive).unwrap_or(&0),
+        count_map.get(&TaskType::Random).unwrap_or(&0)
     );
 }
 
