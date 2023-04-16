@@ -21,25 +21,26 @@ async fn main() {
 
     // protect both with a mutex
     // let mut count_map = HashMap::new();
-    let count_map:Arc<Mutex<HashMap<TaskType, usize>>> = Arc::new(Mutex::new(HashMap::new()));
-    let mut taskq = VecDeque::from(Task::generate_initial(seed, starting_height, max_children));
+    let count_map = Arc::new(Mutex::new(HashMap::new()));
+    let taskq = Arc::new(Mutex::new(VecDeque::from(Task::generate_initial(seed, starting_height, max_children))));
 
     // output can be safely accessed from multiple threads
     let output = Arc::new(AtomicU64::new(0));
 
     let start = Instant::now();
-    while let Some(next) = taskq.pop_front() {
+    while let Some(next) = taskq.lock().unwrap().pop_front() {
         // process initial set of tasks
         // wrap it in a tokio task
         // new tasks won't be added to the taskq but instead the handle of the task will be saved in another vector
         let count_map = count_map.clone();
         let output = output.clone();
+        let taskq = taskq.clone();
         let mut pending_tasks = Vec::new();
         let handle = tokio::spawn(async move {
             *count_map.lock().unwrap().entry(next.typ).or_insert(0usize) += 1;
             let result = async {next.execute()}.await;
             output.fetch_xor(result.0, Ordering::SeqCst); // DONE
-            // taskq.extend(result.1.into_iter());
+            taskq.lock().unwrap().extend(result.1.into_iter());
         });
         pending_tasks.push(handle);
     }
