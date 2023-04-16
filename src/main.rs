@@ -23,17 +23,20 @@ async fn main() {
     let taskq = Arc::new(Mutex::new(VecDeque::from(Task::generate_initial(seed, starting_height, max_children))));
     
     let output = Arc::new(AtomicU64::new(0));
-    
-    let mut pending_tasks = Vec::new();
 
     let start = Instant::now();
 
     while Arc::strong_count(&taskq) > 1 || !(taskq.lock().unwrap().is_empty()){
-        //taskq may be empty
-        if taskq.lock().unwrap().is_empty() {
-            continue;
+        let curr_task;
+        {
+            //taskq may be empty
+            if taskq.lock().unwrap().is_empty() {
+                continue;
+            } else {
+                curr_task = (*taskq.lock().unwrap()).pop_front();
+            }
         }
-        let curr_task = (*taskq.lock().unwrap()).pop_front();
+
         let next = curr_task.unwrap();
 
         *count_map.entry(next.typ).or_insert(0usize) += 1;
@@ -41,13 +44,14 @@ async fn main() {
         let taskq_clone = taskq.clone();
         let handle = tokio::spawn(async move {
             let result = next.execute();
-            taskq_clone.lock().unwrap().extend(result.1.into_iter());
+            {
+                taskq_clone.lock().unwrap().extend(result.1.into_iter());
+            }
             output_clone.fetch_xor(result.0, Ordering::SeqCst);
         });
-        pending_tasks.push(handle);
+        std::mem::drop(handle)
     }
     
-    join_all(pending_tasks).await;
     let end = Instant::now();
 
     eprintln!("Completed in {} s", (end - start).as_secs_f64());
