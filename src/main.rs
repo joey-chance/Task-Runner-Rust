@@ -40,7 +40,7 @@ async fn main() {
         *count_map.entry(next.typ).or_insert(0usize) += 1;
         let output_clone = output.clone();
         let taskq_clone = taskq.clone();
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             let result = next.execute();
             {
                 taskq_clone.lock().unwrap().extend(result.1.into_iter());
