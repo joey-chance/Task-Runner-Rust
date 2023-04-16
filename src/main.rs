@@ -28,26 +28,23 @@ async fn main() {
 
     let start = Instant::now();
 
-    let mut curr_task = (*taskq.lock().unwrap()).pop_front();
-    while curr_task.is_some() || Arc::strong_count(&taskq) > 1  {
-        
-        if !curr_task.is_some() {
-            curr_task = (*taskq.lock().unwrap()).pop_front();
+    while Arc::strong_count(&taskq) > 1 || !(taskq.lock().unwrap().is_empty()){
+        //taskq may be empty
+        if taskq.lock().unwrap().is_empty() {
             continue;
         }
-        
+        let curr_task = (*taskq.lock().unwrap()).pop_front();
         let next = curr_task.unwrap();
 
         *count_map.entry(next.typ).or_insert(0usize) += 1;
-        let output = output.clone();
+        let output_clone = output.clone();
         let taskq_clone = taskq.clone();
         let handle = tokio::spawn(async move {
             let result = next.execute();
-            output.fetch_xor(result.0, Ordering::SeqCst);
             taskq_clone.lock().unwrap().extend(result.1.into_iter());
+            output_clone.fetch_xor(result.0, Ordering::SeqCst);
         });
         pending_tasks.push(handle);
-        curr_task = (*taskq.lock().unwrap()).pop_front();
     }
     
     join_all(pending_tasks).await;
