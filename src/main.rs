@@ -21,8 +21,10 @@ async fn main() {
 
     let mut count_map = HashMap::new();
     let taskq = Arc::new(Mutex::new(VecDeque::from(Task::generate_initial(seed, starting_height, max_children))));
-    let mut pending_tasks = Vec::new();
+    
     let output = Arc::new(AtomicU64::new(0));
+    
+    let mut pending_tasks = Vec::new();
 
     let start = Instant::now();
     while let Some(next) = taskq.lock().unwrap().pop_front() {
@@ -30,7 +32,7 @@ async fn main() {
         let output = output.clone();
         let taskq = taskq.clone();
         let handle = tokio::spawn(async move {
-            let result = async {next.execute()}.await;
+            let result = next.execute();
             output.fetch_xor(result.0, Ordering::SeqCst);
             taskq.lock().unwrap().extend(result.1.into_iter());
         });
