@@ -47,7 +47,6 @@ async fn main() {
             }
             output_clone.fetch_xor(result.0, Ordering::SeqCst);
         });
-        std::mem::drop(handle)
     }
     
     let end = Instant::now();
